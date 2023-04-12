@@ -126,7 +126,11 @@ found:
     release(&p->lock);
     return 0;
   }
-
+  if((p->usyscall = (struct usyscall *)kalloc()) == 0){
+    freeproc(p);
+    release(&p->lock);
+    return 0;
+  }
   // An empty user page table.
   p->pagetable = proc_pagetable(p);
   if(p->pagetable == 0){
@@ -140,7 +144,7 @@ found:
   memset(&p->context, 0, sizeof(p->context));
   p->context.ra = (uint64)forkret;
   p->context.sp = p->kstack + PGSIZE;
-
+  p->usyscall->pid = p->pid;
   return p;
 }
 
@@ -150,9 +154,14 @@ found:
 static void
 freeproc(struct proc *p)
 {
-  if(p->trapframe)
+  if(p->trapframe){
     kfree((void*)p->trapframe);
+  }
+  if(p->usyscall){
+    kfree((void*)p->usyscall);   //释放指向的物理内存
+  }
   p->trapframe = 0;
+  p->usyscall = 0;    //这个地方，需要把结构体指针标为0，不是pid，因为这个页面已经释放了
   if(p->pagetable)
     proc_freepagetable(p->pagetable, p->sz);
   p->pagetable = 0;
@@ -195,7 +204,12 @@ proc_pagetable(struct proc *p)
     uvmfree(pagetable, 0);
     return 0;
   }
-
+  if(mappages(pagetable,USYSCALL,PGSIZE,(uint64)(p->usyscall),PTE_R|PTE_V|PTE_U) <0 ){      //权限问题，V表示是否存在于页表中。大坑，这里用户态需要使用，所以要给PTE_U权限
+    uvmunmap(pagetable, TRAMPOLINE, 1, 0);
+    uvmunmap(pagetable, TRAPFRAME, 1, 0);             //这个地方是个大坑，当映射失败时，只释放前面的页面，本页面还没申请，故不需要释放。
+    uvmfree(pagetable, 0);
+    return 0;
+  }
   return pagetable;
 }
 
@@ -206,6 +220,7 @@ proc_freepagetable(pagetable_t pagetable, uint64 sz)
 {
   uvmunmap(pagetable, TRAMPOLINE, 1, 0);
   uvmunmap(pagetable, TRAPFRAME, 1, 0);
+  uvmunmap(pagetable,USYSCALL,1,0);
   uvmfree(pagetable, sz);
 }
 
@@ -238,7 +253,6 @@ userinit(void)
   // prepare for the very first "return" from kernel to user.
   p->trapframe->epc = 0;      // user program counter
   p->trapframe->sp = PGSIZE;  // user stack pointer
-
   safestrcpy(p->name, "initcode", sizeof(p->name));
   p->cwd = namei("/");
 
@@ -291,7 +305,7 @@ fork(void)
 
   // copy saved user registers.
   *(np->trapframe) = *(p->trapframe);
-
+  
   // Cause fork to return 0 in the child.
   np->trapframe->a0 = 0;
 
@@ -304,7 +318,6 @@ fork(void)
   safestrcpy(np->name, p->name, sizeof(p->name));
 
   pid = np->pid;
-
   release(&np->lock);
 
   acquire(&wait_lock);

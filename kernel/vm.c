@@ -432,3 +432,41 @@ copyinstr(pagetable_t pagetable, char *dst, uint64 srcva, uint64 max)
     return -1;
   }
 }
+
+
+void
+vmprint(pagetable_t pagetable){
+  printf("page table %p\n",pagetable);
+  for(int i = 0;i < 512;i++){
+    pte_t pte = pagetable[i];
+    pagetable_t this_ptbl_1 = pagetable;
+    if((pte & PTE_V) != 0){
+      printf("..%d: pte %p pa %p\n",i,pte,PTE2PA(pte));
+      this_ptbl_1 = (pagetable_t)PTE2PA(pte);
+      for(int j = 0; j < 512;j++){
+        pte = this_ptbl_1[j];
+        if((pte & PTE_V) != 0){
+          printf(".. ..%d: pte %p pa %p\n",j,pte,PTE2PA(pte));
+          pagetable_t this_ptbl_2 = (pagetable_t)PTE2PA(pte);
+          for(int k = 0; k < 512;k++){
+            pte = this_ptbl_2[k];
+            if((pte & PTE_V) != 0)  printf(".. .. ..%d: pte %p pa %p\n",k,pte,PTE2PA(pte));
+          }
+        }
+      }
+    }
+  }
+}         //依托答辩，用递归的话不会解决输出格式的问题
+
+
+int vm_pgaccess(pagetable_t pagetable,uint64 va){
+  if(va > MAXVA) return -1;
+  pte_t *pte = walk(pagetable,va,0);
+  if(*pte == 0) return 0;
+  // printf("pte: %p\n",*pte);
+  if((*pte & PTE_A) != 0){
+      *pte = *pte & (~PTE_A);
+      return 1;
+  }
+  return 0;
+}
