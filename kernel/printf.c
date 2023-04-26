@@ -132,3 +132,13 @@ printfinit(void)
   initlock(&pr.lock, "pr");
   pr.locking = 1;
 }
+
+void
+backtrace(){
+  printf("backtrace:\n");
+  uint64 nowfp = r_fp();
+  while(nowfp < PGROUNDUP(nowfp)){
+    printf("%p\n",*(uint64 *)(nowfp - 8));    //uint64到地址的转换中,*((uint64 *)nowfp - 8)是错误的，取地址后再-8
+    nowfp = *(uint64 *)(nowfp -16);
+  }
+}

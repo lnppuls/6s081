@@ -78,7 +78,16 @@ usertrap(void)
 
   // give up the CPU if this is a timer interrupt.
   if(which_dev == 2)
+  {
+    if(p->ticks != 0){
+      p->cnt++;
+      if(p->cnt == p->ticks){
+        memmove(&(p->alarmframe),p->trapframe,sizeof(p->alarmframe));
+        p->trapframe->epc = p->funcaddrs;
+      }
+    }
     yield();
+  }
 
   usertrapret();
 }
@@ -218,3 +227,18 @@ devintr()
   }
 }
 
+uint64
+sys_sigalarm(void){
+  struct proc *p = myproc();
+  if(argint(0,&p->ticks) < 0) return -1;
+  if(argaddr(1,&p->funcaddrs) < 0) return -1;
+  return 0;
+}
+
+uint64 
+sys_sigreturn(void){
+  struct proc * p = myproc();
+  memmove(p->trapframe,&(p->alarmframe),sizeof(struct trapframe));
+  p->cnt = 0;
+  return 0;
+}
