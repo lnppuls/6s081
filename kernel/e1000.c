@@ -97,11 +97,33 @@ e1000_transmit(struct mbuf *m)
 {
   printf("transmit begin\n");
   // 1.读取TDT寄存器，询问下一个数据包的环索引
-  // 2.检查环是否有溢出。如果没有设置TXD_STAT_DD，上一次发送未完成，返回错误
-  // 3.溢出则删除环最后的mbuf
+  uint64 ring_idx = regs[E1000_TDT];
+// 2.检查环是否有溢出。如果没有设置TXD_STAT_DD，上一次发送未完成，返回错误
+// 3.溢出则删除环最后的mbuf
+  if(ring_idx < TX_RING_SIZE){
+    if(tx_ring[ring_idx].status != E1000_TXD_STAT_DD)
+      return -1;
+    else{
+      if(tx_mbufs[ring_idx] != 0)
+        mbuffree(tx_mbufs[ring_idx]);
+      printf("free success!\n");
+    }
+  }
   // 4.填写描述符，隐藏mbuf指针以供后面释放
-  // 5.更新环位置
-  // 6.添加到环成功返回1，else 返回-1以便释放mbuf
+  tx_mbufs[ring_idx] = m;
+  tx_ring[ring_idx].addr = (uint64)m->head;
+  tx_ring[ring_idx].status = 0;
+  tx_ring[ring_idx].length = m->len;
+
+  tx_ring[ring_idx].cmd |= (1 << 5);  //设置cmd的必要位，见文档
+  tx_ring[ring_idx].cmd |= (1 << 4);  //
+
+  // 5.更新环位置,模上大小加一
+  regs[E1000_TDT] %= TX_RING_SIZE;
+  regs[E1000_TDT]++;
+
+  // 6.添加到环成功返回0，else 错误返回-1以便释放mbuf
+
   //
   // Your code here.
   //
@@ -109,7 +131,6 @@ e1000_transmit(struct mbuf *m)
   // the TX descriptor ring so that the e1000 sends it. Stash
   // a pointer so that it can be freed after sending.
   //
-  
   return 0;
 }
 
