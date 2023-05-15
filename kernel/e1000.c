@@ -95,6 +95,13 @@ e1000_init(uint32 *xregs)
 int
 e1000_transmit(struct mbuf *m)
 {
+  printf("transmit begin\n");
+  // 1.读取TDT寄存器，询问下一个数据包的环索引
+  // 2.检查环是否有溢出。如果没有设置TXD_STAT_DD，上一次发送未完成，返回错误
+  // 3.溢出则删除环最后的mbuf
+  // 4.填写描述符，隐藏mbuf指针以供后面释放
+  // 5.更新环位置
+  // 6.添加到环成功返回1，else 返回-1以便释放mbuf
   //
   // Your code here.
   //
@@ -109,6 +116,7 @@ e1000_transmit(struct mbuf *m)
 static void
 e1000_recv(void)
 {
+  printf("receive\n");
   //
   // Your code here.
   //
